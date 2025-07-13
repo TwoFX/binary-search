@@ -34,11 +34,17 @@ class MyLinearOrder (α : Type u) extends LE α, LT α where
   le_iff_lt_or_eq {a b : α} : a ≤ b ↔ a < b ∨ a = b
   lt_trans {a b c : α} : a < b → b < c → a < c
 
-theorem MyLinearOrder.le_or_lt [MyLinearOrder α] {a b : α} : a ≤ b ∨ b < a := by
+theorem MyLinearOrder.le_or_lt [MyLinearOrder α] (a b : α) : a ≤ b ∨ b < a := by
   simp [Classical.or_iff_not_imp_left, MyLinearOrder.not_le]
 
 theorem MyLinearOrder.le_refl [MyLinearOrder α] {a : α} : a ≤ a := by
   simp [le_iff_lt_or_eq]
+
+theorem MyLinearOrder.not_lt [MyLinearOrder α] {a b : α} : ¬a < b ↔ b ≤ a := by
+  grind [MyLinearOrder.not_le]
+
+theorem MyLinearOrder.lt_irrefl [MyLinearOrder α] {a : α} : ¬a < a := by
+  simp [MyLinearOrder.not_lt, MyLinearOrder.le_refl]
 
 theorem MyLinearOrder.le_of_lt [MyLinearOrder α] {a b : α} : a < b → a ≤ b := by
   simp_all [le_iff_lt_or_eq]
@@ -50,6 +56,18 @@ theorem MyLinearOrder.le_trans [MyLinearOrder α] {a b c : α} : a ≤ b → b �
   · exact le_of_lt hab
   · exact le_of_lt hbc
   · exact le_refl
+
+theorem MyLinearOrder.lt_of_le_of_lt [MyLinearOrder α] {a b c : α} : a ≤ b → b < c → a < c := by
+  rw [le_iff_lt_or_eq]
+  rintro (hab|rfl) hbc
+  · exact lt_trans hab hbc
+  · exact hbc
+
+theorem MyLinearOrder.lt_of_lt_of_le [MyLinearOrder α] {a b c : α} : a < b → b ≤ c → a < c := by
+  rw [le_iff_lt_or_eq]
+  rintro hab (hbc|rfl)
+  · exact lt_trans hab hbc
+  · exact hab
 
 class HasPartialBinarySearch (α : Type u) extends HasBinarySearch α, MyLinearOrder α where
   checkRange_eq_empty_iff {lo hi : α} : checkRange lo hi = .empty ↔ hi ≤ lo
@@ -80,62 +98,66 @@ def partialBinarySearch {α : Type u} [HasPartialBinarySearch α] (lo hi : α) (
       partialBinarySearch mid hi (fun a h₁ h₂ => f a (MyLinearOrder.le_trans (le_midpoint h) h₁) h₂)
 termination_by rangeSize lo hi
 
-/- theorem binarySearch_correct {α : Type u} [LE α] [LT α]
-    (lt_of_lt_of_le : ∀ {a b c : α}, a < b → b ≤ c → a < c)
-    (lt_of_le_of_lt : ∀ {a b c : α}, a ≤ b → b < c → a < c)
-    (lt_irrefl : ∀ (a : α), ¬a < a)
-    (not_le : ∀ {a b : α}, ¬a ≤ b ↔ b < a)
-    (lt_or_le : ∀ (a b : α), a < b ∨ b ≤ a)
-    (le_of_lt : ∀ {a b : α}, a < b → a ≤ b)
-    (le_refl : ∀ {a : α}, a ≤ a)
-    (le_trans : ∀ {a b c : α}, a ≤ b → b ≤ c → a ≤ c)
+theorem binarySearch_eq_partialBinarySearch {α : Type u} [HasPartialBinarySearch α] (f : α → Bool) (lo hi : α) :
+    binarySearch f lo hi = partialBinarySearch lo hi (fun a _ _ => f a) := by
+  fun_induction binarySearch <;> grind [partialBinarySearch]
 
-    {midpoint : α → α → α} {rangeSize : α → α → Nat}
-    (hr₁ : ∀ a b, 2 ≤ rangeSize a b → rangeSize a (midpoint a b) < rangeSize a b)
-    (hr₂ : ∀ a b, 2 ≤ rangeSize a b → rangeSize (midpoint a b) b < rangeSize a b)
-    (hr₃ : ∀ a b, 2 ≤ rangeSize a b → a < midpoint a b)
-    (hr₄ : ∀ a b, 2 ≤ rangeSize a b → midpoint a b < b)
-    (hr₅ : ∀ a b, rangeSize a b = 0 → ∀ c, c < a ∨ b ≤ c)
-    (hr₆ : ∀ a b, rangeSize a b = 1 → ∀ c, a ≤ c ∧ c < b ↔ c = a)
-    (f : α → Bool) (hf : ∀ a, f a = true → ∀ b, a ≤ b → f b = true)
+class HasLawfulBinarySearch (α : Type u) extends HasPartialBinarySearch α where
+  of_checkRange_eq_singleton {lo hi : α} : checkRange lo hi = .singleton → ∀ c, lo ≤ c ∧ c < hi → c = lo
+
+open HasLawfulBinarySearch
+
+theorem partialBinarySearch_correct [HasLawfulBinarySearch α] (lo hi : α)
+    (f : (a : α) → lo ≤ a → a < hi → Bool)
+    (hf : ∀ a b, (h₁ : lo ≤ a) → (h₂ : a ≤ b) → (h₃ : b < hi) → f a h₁ (MyLinearOrder.lt_of_le_of_lt h₂ h₃) = true →
+      f b (MyLinearOrder.le_trans h₁ h₂) h₃ = true) (hlh : lo ≤ hi) :
+    partialBinarySearch lo hi f ≤ hi ∧
+    lo ≤ partialBinarySearch lo hi f ∧
+    (∀ a h₁ h₂, f a h₁ h₂ = true ↔ partialBinarySearch lo hi f ≤ a) := by
+  fun_induction partialBinarySearch with
+  | case1 lo hi f h =>
+    refine ⟨MyLinearOrder.le_refl, hlh, ?_⟩
+    rw [checkRange_eq_empty_iff] at h
+    intro _ h₁ h₂
+    exact absurd (MyLinearOrder.lt_of_le_of_lt (MyLinearOrder.le_trans h h₁) h₂) (MyLinearOrder.lt_irrefl)
+  | case2 lo hi f h hflo =>
+    refine ⟨hlh, MyLinearOrder.le_refl, fun a h₁ h₂ => ?_⟩
+    simp_all [of_checkRange_eq_singleton h _ ⟨h₁, h₂⟩, MyLinearOrder.le_refl]
+  | case3 lo hi f h hflo =>
+    refine ⟨MyLinearOrder.le_refl, hlh, fun a h₁ h₂ => ?_⟩
+    simp_all [of_checkRange_eq_singleton h _ ⟨h₁, h₂⟩, MyLinearOrder.not_le, MyLinearOrder.lt_of_le_of_lt h₁ h₂]
+  | case4 lo hi f h mid hfmid _ ih =>
+    replace ih := ih ?_ (le_midpoint h)
+    · rcases ih with ⟨ih₁, ih₂, ih₃⟩
+      refine ⟨MyLinearOrder.le_trans ih₁ (midpoint_le h), ih₂, fun a h₁ h₂ => ?_⟩
+      obtain (hamid|hamid) := MyLinearOrder.le_or_lt mid a
+      · simp [MyLinearOrder.le_trans ih₁ hamid, hf mid a (le_midpoint h) hamid h₂ hfmid]
+      · exact ih₃ _ h₁ hamid
+    · exact fun a b h₁ h₂ h₃ hfa => hf a b h₁ h₂ (MyLinearOrder.lt_trans h₃ (midpoint_lt h)) hfa
+  | case5 lo hi f h mid hfmid _ ih =>
+    replace ih := ih ?_ (midpoint_le h)
+    · rcases ih with ⟨ih₁, ih₂, ih₃⟩
+      refine ⟨ih₁, MyLinearOrder.le_trans (le_midpoint h) ih₂, fun a h₁ h₂ => ?_⟩
+      obtain (hamid|hamid) := MyLinearOrder.le_or_lt mid a
+      · exact ih₃ _ hamid h₂
+      · refine iff_of_false (fun haf => hfmid ?_) (MyLinearOrder.not_le.2 ?_j)
+        · exact hf a mid h₁ (MyLinearOrder.le_of_lt hamid) _ haf
+        · refine MyLinearOrder.lt_of_lt_of_le hamid ih₂
+    · exact fun a b h₁ h₂ h₃ hfa => hf a b (MyLinearOrder.le_trans (le_midpoint h) h₁) h₂ h₃ hfa
+
+theorem binarySearch_correct [HasLawfulBinarySearch α]
+    (f : α → Bool)
+    (hf : ∀ a, f a = true → ∀ b, a ≤ b → f b = true)
     (lo hi : α) (hlh : lo ≤ hi) :
-    binarySearch midpoint rangeSize hr₁ hr₂ f lo hi ≤ hi ∧
-    lo ≤ binarySearch midpoint rangeSize hr₁ hr₂ f lo hi ∧
-    (∀ a, lo ≤ a → a < hi → (f a = true ↔ binarySearch midpoint rangeSize hr₁ hr₂ f lo hi ≤ a)) := by
-  fun_induction binarySearch with
-  | case1 lo hi h =>
-    refine ⟨le_refl, hlh, fun a ha₁ ha₂ => ?_⟩
-    obtain ha | ha := hr₅ _ _ h a
-    · exact (lt_irrefl lo (lt_of_le_of_lt ha₁ ha)).elim
-    · exact (lt_irrefl hi (lt_of_le_of_lt ha ha₂)).elim
-  | case2 lo hi h₁ h₂ =>
-    refine ⟨hlh, le_refl, fun a ha₁ ha₂ => ?_⟩
-    obtain rfl := (hr₆ _ _ h₁ a).1 ⟨ha₁, ha₂⟩
-    simp_all
-  | case3 lo hi h₁ h₂ =>
-    refine ⟨le_refl, hlh, fun a ha₁ ha₂ => ?_⟩
-    obtain rfl := (hr₆ _ _ h₁ a).1 ⟨ha₁, ha₂⟩
-    simp_all
-  | case4 lo hi n hrs mid hmid _ ih =>
-    obtain ⟨ih₁, ih₂, ih₃⟩ := ih (le_of_lt (hr₃ _ _ (by omega)))
-    refine ⟨?_, ih₂, fun a ha₁ ha₂ => ?_⟩
-    · exact le_of_lt (lt_of_le_of_lt ih₁ (hr₄ _ _ (by omega)))
-    · obtain (hamid|hamid) := lt_or_le a mid
-      · exact ih₃ _ ha₁ hamid
-      · refine ⟨fun _ => le_trans ih₁ hamid, fun ih₃ => ?_⟩
-        exact hf _ hmid _ hamid
-  | case5 lo hi n hrs mid hmid _ ih =>
-    obtain ⟨ih₁, ih₂, ih₃⟩ := ih (le_of_lt (hr₄ _ _ (by omega)))
-    refine ⟨ih₁, ?_, fun a ha₁ ha₂ => ?_⟩
-    · exact le_of_lt (lt_of_lt_of_le (hr₃ _ _ (by omega)) ih₂)
-    · obtain (hmida|hmida) := lt_or_le a mid
-      · classical
-        rw [← Decidable.not_iff_not]
-        simp only [not_le]
-        refine ⟨fun _ => lt_of_lt_of_le hmida ih₂, fun ha hfa => ?_⟩
-        exact hmid (hf _ hfa _ (le_of_lt hmida))
-      · exact ih₃ _ hmida ha₂
- -/
+    binarySearch f lo hi ≤ hi ∧
+    lo ≤ binarySearch  f lo hi ∧
+    (∀ a, lo ≤ a → a < hi → (f a = true ↔ binarySearch f lo hi ≤ a)) := by
+  simp only [binarySearch_eq_partialBinarySearch]
+  exact partialBinarySearch_correct lo hi (fun a _ _ => f a) (fun a b h₁ h₂ h₃ haf => hf _ haf _ h₂) hlh
+
+theorem ite_eq_iff {p : Prop} [Decidable p] {a b c : α} :
+    (if p then a else b) = c ↔ (p ∧ a = c) ∨ (¬ p ∧ b = c) := by
+  split <;> simp_all
 section UInt64
 
 @[inline]
@@ -153,10 +175,6 @@ def UInt64.midpoint (lo hi : UInt64) : UInt64 :=
 
 def UInt64.rangeSize (lo hi : UInt64) : Nat :=
   if lo ≤ hi then (hi - lo).toNat else 0
-
-theorem ite_eq_iff {p : Prop} [Decidable p] {a b c : α} :
-    (if p then a else b) = c ↔ (p ∧ a = c) ∨ (¬ p ∧ b = c) := by
-  split <;> simp_all
 
 theorem helper {lo hi : UInt64} : 2 ≤ (hi - lo).toNat ↔ 2 ≤ hi - lo := by
   rw [UInt64.le_iff_toNat_le]
@@ -248,5 +266,52 @@ instance : HasPartialBinarySearch UInt64 where
     simp only [checkRange, midpoint, UInt64.checkRange_eq_large_iff]
     apply UInt64.midpoint_lt
 
-
 end UInt64
+
+section USize
+
+@[inline]
+def USize.checkRange (lo hi : USize) : RangeCheck :=
+  if hi ≤ lo then
+    .empty
+  else if hi - lo = 1 then
+    .singleton
+  else
+    .large
+
+@[inline]
+def USize.midpoint (lo hi : USize) : USize :=
+  lo + (hi - lo) / 2
+
+def USize.rangeSize (lo hi : USize) : Nat :=
+  if lo ≤ hi then (hi - lo).toNat else 0
+
+theorem USize.helper {lo hi : USize} : 2 ≤ (hi - lo).toNat ↔ 2 ≤ hi - lo := by
+  rw [USize.le_iff_toNat_le]
+  grind
+
+theorem USize.checkRange_eq_empty_iff {lo hi : USize} :
+    checkRange lo hi = .empty ↔ hi ≤ lo := by
+  grind [USize.checkRange]
+
+theorem USize.checkRange_eq_large_iff {lo hi : USize} :
+    checkRange lo hi = .large ↔ 2 ≤ rangeSize lo hi := by
+  rw [checkRange, rangeSize]
+  rw [ite_eq_iff]
+  simp only [reduceCtorEq, and_false, USize.not_le, ite_eq_right_iff, imp_false, false_or]
+  refine ⟨fun ⟨h₁, h₂⟩ => ?_, ?_⟩
+  · rw [if_pos, helper]
+    · sorry
+    · apply USize.le_of_lt h₁
+  · split
+    · rw [helper]
+      sorry
+    · simp
+
+theorem USize.le_of_rangeSize_pos {lo hi : USize} (h : 0 < rangeSize lo hi) : lo ≤ hi := by
+  grind [rangeSize]
+
+theorem USize.rangeSize_eq_of_pos {lo hi : USize} (h : 0 < rangeSize lo hi) : rangeSize lo hi = (hi - lo).toNat := by
+  grind [rangeSize]
+
+end USize
