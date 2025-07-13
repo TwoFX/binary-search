@@ -140,9 +140,9 @@ theorem partialBinarySearch_correct [HasLawfulBinarySearch α] (lo hi : α)
       refine ⟨ih₁, MyLinearOrder.le_trans (le_midpoint h) ih₂, fun a h₁ h₂ => ?_⟩
       obtain (hamid|hamid) := MyLinearOrder.le_or_lt mid a
       · exact ih₃ _ hamid h₂
-      · refine iff_of_false (fun haf => hfmid ?_) (MyLinearOrder.not_le.2 ?_j)
+      · refine iff_of_false (fun haf => hfmid ?_) (MyLinearOrder.not_le.2 ?_)
         · exact hf a mid h₁ (MyLinearOrder.le_of_lt hamid) _ haf
-        · refine MyLinearOrder.lt_of_lt_of_le hamid ih₂
+        · exact MyLinearOrder.lt_of_lt_of_le hamid ih₂
     · exact fun a b h₁ h₂ h₃ hfa => hf a b (MyLinearOrder.le_trans (le_midpoint h) h₁) h₂ h₃ hfa
 
 theorem binarySearch_correct [HasLawfulBinarySearch α]
