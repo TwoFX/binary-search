@@ -248,7 +248,6 @@ instance : HasBinarySearch UInt64 where
 def UInt64.binarySearch (f : UInt64 → Bool) (lo hi : UInt64) : UInt64 :=
   _root_.binarySearch f lo hi
 
-set_option trace.compiler.ir.result true in
 def sqrt (a : UInt64) : UInt64 :=
   UInt64.binarySearch (fun b => b * b ≥ a) 0 a
 

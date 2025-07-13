@@ -1,6 +1,6 @@
 name = "binary-search"
 version = "0.1.0"
-defaultTargets = ["binary-search"]
+defaultTargets = ["binary-search", "BinarySearch"]
 
 [[lean_lib]]
 name = "BinarySearch"
